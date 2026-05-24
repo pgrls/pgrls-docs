@@ -1,0 +1,25 @@
+title: pgrls
+description: >-
+  Public docs for pgrls — the static analyzer for Postgres Row-Level
+  Security. Comparisons with adjacent tools (sqlfluff, Atlas, Semgrep, …)
+  and per-stack guidance (Supabase, PostgREST, Hasura, Django).
+url: https://pgrls.github.io
+baseurl: /pgrls-docs
+remote_theme: just-the-docs/just-the-docs
+plugins:
+  - jekyll-remote-theme
+search_enabled: true
+heading_anchors: true
+color_scheme: light
+aux_links:
+  "GitHub":
+    - "https://github.com/pgrls/pgrls"
+  "PyPI":
+    - "https://pypi.org/project/pgrls/"
+  "Marketplace":
+    - "https://github.com/marketplace/actions/pgrls-postgres-rls-linter"
+back_to_top: true
+back_to_top_text: "Back to top"
+footer_content: >-
+  pgrls is MIT-licensed. Source at
+  <a href="https://github.com/pgrls/pgrls">github.com/pgrls/pgrls</a>.
