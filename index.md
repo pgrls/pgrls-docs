@@ -9,10 +9,10 @@ permalink: /
 # pgrls
 
 A **static analyzer for Postgres Row-Level Security**. Connects to a
-live database, runs 43 rules over every policy, and flags the
+live database, runs 44 rules over every policy, and flags the
 semantic bugs (broken row scoping, inverted auth checks, missing
 `WITH CHECK`, `BYPASSRLS` roles, view-mediated bypasses) that eyeball
-review misses. 12 of the 43 rules mechanically auto-fix. MIT,
+review misses. 12 of the 44 rules mechanically auto-fix. MIT,
 Python 3.11+, tested PostgreSQL 15–17.
 
 ```bash
@@ -21,12 +21,28 @@ export DATABASE_URL='postgres://…'
 pgrls lint
 ```
 
+## New in 0.6.1 — SEC033
+
+A Supabase RLS policy that gates on `user_metadata` is
+**self-bypassable** in one line of client code:
+
+```sql
+USING (auth.jwt() -> 'user_metadata' ->> 'role' = 'admin')
+-- exploit: await supabase.auth.updateUser({ data: { role: "admin" } })
+```
+
+`user_metadata` is end-user writable via the standard Supabase auth
+API — by design. The safe counterpart is `app_metadata`
+(service-role-only). `pgrls lint --rule SEC033` catches every shape
+(all four JSON operators + `raw_user_meta_data` column refs). Default
+severity `error` — fails CI on first sight. Released 2026-05-24.
+
 ## Quick links
 
 - **[Quickstart](https://github.com/pgrls/pgrls/blob/main/docs/QUICKSTART.md)** —
   5 minutes from `pip install` to a real RLS finding.
 - **[Rule reference (AGENTS.md)](https://github.com/pgrls/pgrls/blob/main/AGENTS.md)** —
-  all 43 rules, each with detection logic, severity, and remediation.
+  all 44 rules, each with detection logic, severity, and remediation.
 - **[GitHub Action on the Marketplace](https://github.com/marketplace/actions/pgrls-postgres-rls-linter)** —
   one-line CI integration.
 - **[CHANGELOG](https://github.com/pgrls/pgrls/blob/main/CHANGELOG.md)**.
@@ -36,7 +52,7 @@ pgrls lint
 - **[Comparisons](comparisons/)** — pgrls vs adjacent tools and how it
   fits with Postgres ecosystems (Supabase, PostgREST, Hasura, Django).
 
-## The bug pgrls catches
+## The other bug pgrls catches (the classic)
 
 ```sql
 CREATE POLICY tenant_read ON public.documents
