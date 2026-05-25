@@ -1,0 +1,35 @@
+// Just the Docs collapses nested nav sections by default — child
+// pages only appear in the sidebar when you're on the parent or one
+// of its siblings. For the Comparisons section that hides 10 useful
+// links most of the time. Force them open whenever the sidebar
+// renders.
+//
+// The theme's expander toggle uses a `.nav-list-expander` button +
+// a JS-driven `.active` class on the `<li>` to swap display: none /
+// block on `.nav-list-item .nav-list .nav-list`. Targeting the
+// Comparisons parent by its href (`/pgrls-docs/comparisons/`) keeps
+// every other nested section's collapse behavior intact — only this
+// one section is pinned open.
+
+.nav-list .nav-list-item {
+  > a[href$="/comparisons/"] + .nav-list-expander + .nav-list {
+    display: block;
+  }
+
+  // Newer versions of the theme nest the expander as a sibling of
+  // the link inside a wrapper; cover both shapes so a theme bump
+  // doesn't silently re-collapse the section.
+  > .nav-list-link[href$="/comparisons/"] ~ .nav-list,
+  > a[href$="/comparisons/"] ~ .nav-list {
+    display: block;
+  }
+}
+
+// Hide the chevron/expander on the pinned-open section so the UI
+// doesn't suggest a collapsed state that doesn't exist.
+.nav-list .nav-list-item {
+  > a[href$="/comparisons/"] + .nav-list-expander,
+  > .nav-list-link[href$="/comparisons/"] + .nav-list-expander {
+    display: none;
+  }
+}
