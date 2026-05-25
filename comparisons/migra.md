@@ -5,81 +5,56 @@ nav_order: 70
 permalink: /comparisons/migra/
 ---
 
-# pgrls vs. migra
+# pgrls vs. migra — do I need both?
 
-**Adjacent concerns. migra has been deprecated; pgrls overlaps only
-narrowly with what migra did.**
+**Short answer: no.** migra was a schema-diff tool that was
+deprecated in 2022 and never handled RLS policies in its output.
+The only thing the two tools share is the word "diff" in a command
+name. If you want migra's actual function (whole-schema migrations)
+today, see [Atlas](atlas.md).
 
-[migra](https://github.com/djrobstep/migra) was a Postgres schema-diff
-tool — point it at two databases, get back the SQL that migrates one
-into the other. The project was **deprecated in September 2022** with
-no further releases planned (the README points at a successor project,
-`results`). At its peak it was the popular Python answer to "diff two
-Postgres schemas and emit a migration."
+## What migra did, and what `pgrls diff` does
 
-**pgrls** is a Row-Level Security linter for Postgres. It does include
-a `pgrls diff` command, which diffs two policy snapshots (or a snapshot
-vs. a live DB) — but `pgrls diff` is a **semantic policy-change
-classifier**, not a general DDL migration generator. The two tools'
-diff features overlap in *name only*.
+**migra** ([github.com/djrobstep/migra](https://github.com/djrobstep/migra))
+diffed two Postgres schemas and emitted the SQL to migrate one into
+the other:
 
-## At a glance
+```bash
+migra postgres://old postgres://new
+# → ALTER TABLE …, CREATE INDEX …, etc.
+```
 
-|                                  | migra (deprecated 2022)                       | pgrls                                                 |
-| -------------------------------- | --------------------------------------------- | ----------------------------------------------------- |
-| Status                           | Deprecated; no further releases               | Actively maintained (current 0.6.x)                   |
-| Scope                            | Whole-schema diff → migration SQL             | RLS linter + RLS-policy semantic diff                 |
-| Database                         | Postgres                                      | Postgres                                              |
-| Handles RLS policies in the diff | No — schema-shape diff only                   | Yes — that IS the focus                               |
-| Emits migration SQL              | Yes (full schema migration)                   | No (pgrls is read-only; auto-fix emits remediation SQL but doesn't manage migrations) |
-| Classification of changes        | None — emits raw DDL                          | SAFE / BREAKING / REQUIRES_REVIEW / DANGEROUS         |
-| Linter rules                     | None                                          | 43                                                    |
+The README marks the project deprecated as of September 2022 and
+points at a successor (`results`). At its peak it never touched RLS
+policies in its diff output — it operated on tables, columns,
+indexes, constraints, views.
 
-## Where their diff features overlap (narrowly)
+**`pgrls diff`** is a different command in spirit. It diffs two
+*policy* snapshots and classifies the change by what it does to
+*row access*:
 
-Both can show *"what changed between two Postgres database states."*
-migra did this for the whole schema (tables, columns, indexes,
-constraints, views) and emitted migration SQL. **migra never explicitly
-handled RLS policies in its diff output.**
+```bash
+pgrls snapshot --output=before.json
+# … apply your migration …
+pgrls diff before.json
+# → SAFE / BREAKING / REQUIRES_REVIEW / DANGEROUS
+```
 
-pgrls's `pgrls diff` does only the RLS-policy delta — but it
-classifies the change by *what it does to row access*:
+It does not emit migration SQL. It tells you whether a migration
+*widened access* — orthogonal to whether the schema shape changed.
 
-- **SAFE** — predicate tightened, no new role grant, no new
-  permissive policy.
-- **BREAKING** — predicate widened OR a new permissive policy grants
-  access where none existed before.
-- **REQUIRES_REVIEW** — semantically ambiguous (e.g. an OR-branch
-  added that may or may not widen, depending on data).
-- **DANGEROUS** — a class of regressions that almost always means a
-  leak (e.g. an `IS NULL OR …` disjunct added, a `BYPASSRLS` role
-  newly granted).
+## Capability check
 
-That classification is the whole value — it gates CI on access
-*widening*, not on every schema change.
+|                                  | migra (deprecated 2022) | `pgrls diff`                     |
+| -------------------------------- | :---:                   | :---:                            |
+| Whole-schema diff → migration SQL | ✓                       | —                                |
+| Active maintenance               | —                       | ✓                                |
+| Handles RLS policies             | —                       | ✓ (that's the whole point)        |
+| Classifies access widening       | —                       | ✓ (SAFE/BREAKING/REVIEW/DANGEROUS) |
 
-## If you used migra in the past
+## Verdict
 
-You probably used it for whole-schema migrations; pgrls doesn't try to
-fill that role. For schema migrations specifically, the modern
-alternatives are:
-
-- **[Atlas](atlas.md)** — declarative + versioned schema management,
-  multi-database, with 50+ DDL safety analyzers.
-- **migra's listed successor** (`results`) — if it has matured into
-  the role.
-- Framework-native migration tooling (Django, Rails, sqitch, Flyway,
-  golang-migrate, etc.).
-
-pgrls slots in as the **policy-correctness layer** on top of whichever
-migration tool you use — read the migrated state and tell you if the
-RLS posture is actually safe.
-
-## Honest summary
-
-migra and pgrls don't really compete — migra solved a different
-problem (whole-schema diffs / migration generation) and is no longer
-maintained. The only overlap is the word "diff" in both tool names;
-the semantics are completely different. If you want migra's actual
-functionality today, [Atlas](atlas.md) is the modern answer; pgrls
-sits beside it as the RLS-correctness check.
+migra is gone; `pgrls diff` is unrelated. For migra's old role
+(whole-schema diff + migration generation), use [Atlas](atlas.md).
+Use `pgrls diff` *on top of* a real migration tool, as the access-
+widening gate for the RLS policies the migration touched.

@@ -5,71 +5,66 @@ nav_order: 10
 permalink: /comparisons/sqlfluff/
 ---
 
-# pgrls vs. sqlfluff
+# pgrls vs. sqlfluff — do I need both?
 
-**Different concerns. Coexistence, not competition.**
+**Short answer: yes.** sqlfluff catches *style* problems in SQL
+text. pgrls catches *security* problems in your live database's
+Row-Level Security policies. They never look at the same thing and
+never flag the same finding.
 
-[sqlfluff](https://github.com/sqlfluff/sqlfluff) is a SQL **style and
-formatting** linter. It covers spacing, indentation, capitalisation,
-templating (Jinja, dbt), and ~25 SQL dialects. It is, in its own
-words, "the SQL linter for humans." Auto-fix is its headline feature.
+## The kind of bug each one catches
 
-**pgrls** is a Row-Level Security policy linter for Postgres. It
-introspects a live database, parses every RLS policy's `USING` and
-`WITH CHECK` predicates, and flags semantic bugs (broken row scoping,
-inverted auth checks, missing `WITH CHECK`, `BYPASSRLS` roles,
-per-row auth-function evaluation, view-mediated RLS bypasses).
+**sqlfluff** ([github.com/sqlfluff/sqlfluff](https://github.com/sqlfluff/sqlfluff))
+fires on style drift like this:
 
-The two tools don't overlap.
+```sql
+SELECT id,name from users where id=1
+--           ^                  ^
+--  missing space          inconsistent capitalization
+```
 
-## At a glance
+It also covers indentation, templating (Jinja, dbt), and ~25 SQL
+dialects. Auto-fix is its headline feature.
 
-|                          | sqlfluff                              | pgrls                                                 |
-| ------------------------ | ------------------------------------- | ----------------------------------------------------- |
-| Scope                    | SQL style / formatting                | Row-Level Security correctness                        |
-| Input                    | `.sql` files                          | Live Postgres database (introspection)                |
-| Dialect                  | 25+ (Postgres, BigQuery, Snowflake…) | Postgres only                                         |
-| Surfaces RLS bugs?       | No                                    | Yes (43 rules across SEC / PERF / HYG / VIEW)         |
-| Auto-fix                 | Most style rules                      | 12 of 43 rules                                        |
-| CI integration           | Pre-commit, GH Actions, VS Code       | GitHub Action, pre-commit, every output format        |
-| Detects `auth.uid() IS NULL OR …` | No                          | Yes (SEC004)                                          |
+**pgrls** fires on security bugs like this:
 
-## What sqlfluff does that pgrls does not
+```sql
+CREATE POLICY tenant_read ON public.documents
+    FOR SELECT
+    USING (auth.uid() IS NULL OR owner_id = auth.uid());
+```
 
-- Multi-dialect SQL style/formatting across the whole SQL surface
-  (SELECT, JOIN, window functions, …).
-- Auto-formats existing SQL on save (VS Code integration).
-- Works on raw `.sql` files — no database required.
-- Handles dbt / Jinja templating.
+That policy admits every row to anonymous clients
+(`auth.uid()` returns `NULL`, the `IS NULL` branch is true, the
+`OR` short-circuits). sqlfluff parses it fine; the column names,
+quoting, and spacing are all correct. The bug is *semantic*. pgrls
+flags it as **SEC004** in milliseconds.
 
-## What pgrls does that sqlfluff does not
+## Capability check
 
-- Reads the *enforced* state of a running Postgres database (not just
-  what's in a migration file). Catches policies an ORM or hot-fix
-  applied that aren't in version control.
-- Semantic analysis of `USING` / `WITH CHECK` predicate ASTs — flags
-  bugs like `auth.uid() IS NULL OR …` (SEC004), missing per-user
-  scoping (SEC027), nullable discriminators (SEC030), `current_user`
-  as a tenant key (SEC018).
-- Per-policy index health (PERF003 / PERF004): catches policies
-  filtering on un-indexed or function-wrapped columns that defeat
-  plain B-tree indexes.
-- Semantic policy-diff (`pgrls diff`): classifies migrations
-  SAFE / BREAKING / REQUIRES_REVIEW / DANGEROUS, so CI gates on access
-  *widening*, not on schema churn.
-- `pgrls.testing` pytest plugin for actual RLS isolation tests.
+|                                   | sqlfluff | pgrls |
+| --------------------------------- | :---:    | :---: |
+| SQL style / formatting            | ✓        | —     |
+| Catches RLS bypass bugs           | —        | ✓     |
+| Catches per-row perf traps in RLS | —        | ✓     |
+| Reads from `.sql` files           | ✓        | —     |
+| Reads from a live Postgres        | —        | ✓     |
+| Auto-fix                          | ✓        | ✓ (12 of 46 rules) |
+| Multi-dialect                     | ✓ (25+)  | — (Postgres only) |
 
-## Use them together
+## Wire both into CI
 
-For a Postgres project with RLS, the cleanest CI stack runs both:
-sqlfluff for SQL style (across migrations, application queries,
-dbt models); pgrls for RLS correctness against the migrated database.
-They consume different inputs and emit different findings, so the
-output never collides.
+```yaml
+- run: pip install sqlfluff pgrls
+- run: sqlfluff lint .          # style on the .sql files
+- run: psql … -f schema.sql     # apply to a CI Postgres
+- run: pgrls lint --schemas public   # security on the result
+```
 
-## Honest summary
+Zero output collision: sqlfluff reads text, pgrls reads catalog.
+Two distinct stages of the same pipeline.
 
-If someone in a Show HN thread asks *"why not just use sqlfluff?"* —
-the answer is that sqlfluff doesn't read policies and isn't trying to.
-It's a great formatter; pgrls is a security linter. The right answer
-is *both*.
+## Verdict
+
+Use both. The 30-second setup above gives you SQL style + RLS
+security in the same CI job. Neither tool can do the other's job.

@@ -5,29 +5,48 @@ has_children: true
 permalink: /comparisons/
 ---
 
-# Comparisons
+# pgrls compared to adjacent tools
 
-Honest, fact-grounded comparisons of pgrls with every adjacent tool
-or ecosystem. Each page covers what the other project does, what
-pgrls does that it doesn't, what it does that pgrls doesn't, and how
-they coexist. No FUD, no overclaiming.
+If you arrived here from a search like "pgrls vs X," the page you
+want is linked below. Each one answers the same three questions:
 
-## Direct-tool comparisons
+1. **Do I need both, one, or neither?**
+2. **What concrete bug does pgrls catch that the other tool doesn't?**
+3. **Is there a 60-second way to wire pgrls into a setup that
+   already has the other tool?**
 
-Tools that share some space with pgrls in some way:
+## SQL / migration linters
 
-- **[vs sqlfluff](sqlfluff)** — SQL **style/formatting** linter, 25+ dialects, no RLS rules. Different concerns; coexist.
-- **[vs squawk](squawk)** — Postgres **DDL migration safety** linter (lock contention, zero-downtime hazards), no RLS rules. Adjacent in CI; coexist.
-- **[vs Atlas](atlas)** — declarative database **schema management** + 50+ DDL safety analyzers; explicitly supports managing RLS policies as code but has no out-of-the-box RLS semantic linting. Strongly complementary.
-- **[vs Semgrep](semgrep)** — generic semantic SAST (30+ languages), no built-in RLS rules. Application-code layer vs pgrls's database layer.
-- **[vs CodeQL](codeql)** — GitHub's query-based SAST, no RLS queries in the standard library. SARIF + Code Scanning UI lets pgrls findings render right next to CodeQL's.
-- **[vs Snyk Code](snyk-code)** — commercial dev-focused SAST, no RLS coverage documented. Application-layer; coexist.
-- **[vs migra](migra)** — Postgres whole-schema diff tool, deprecated 2022, never handled RLS in its diff. Different concept from `pgrls diff`.
+- [**pgrls vs sqlfluff**](sqlfluff/) — style vs security; use both.
+- [**pgrls vs squawk**](squawk/) — migration lock safety vs RLS
+  correctness; use both, squawk pre-apply, pgrls post-apply.
+- [**pgrls vs Atlas**](atlas/) — schema management vs policy linter;
+  Atlas writes the policies, pgrls audits them.
+- [**pgrls vs migra**](migra/) — migra was a schema-diff tool
+  (deprecated 2022); `pgrls diff` is unrelated.
 
-## Ecosystem positioning
+## Generic SAST
 
-The major Postgres-RLS-using frameworks:
+- [**pgrls vs Semgrep**](semgrep/) — Semgrep scans source; pgrls
+  scans the live database. No overlap.
+- [**pgrls vs CodeQL**](codeql/) — same story, but the SARIF
+  output lands in the same Code Scanning UI.
+- [**pgrls vs Snyk Code**](snyk-code/) — commercial SAST; no RLS
+  coverage. Use both.
 
-- **[+ Supabase](supabase)** — provides the RLS engine (`auth.uid()` / `auth.role()` / `auth.jwt()`, the role triad), no linter for the policies you write. pgrls is built for this pattern.
-- **[+ PostgREST](postgrest)** — "all authorization happens in the database" by design; no built-in linter. pgrls audits the policies that decision rests on.
-- **[+ Hasura](hasura)** — engine-level permissions in metadata, separate from RLS. pgrls is relevant when RLS is layered on top as defense-in-depth.
+## Postgres RLS ecosystems
+
+- [**pgrls + Supabase**](supabase/) — Supabase ships the RLS
+  engine; pgrls is the linter that ecosystem doesn't ship.
+- [**pgrls + PostgREST**](postgrest/) — PostgREST's design rests
+  on RLS being correct. pgrls is how you verify that assumption.
+- [**pgrls + Hasura**](hasura/) — Hasura permissions are separate
+  from RLS. pgrls is relevant when you've layered RLS in for
+  defence-in-depth.
+
+## Not here
+
+- **pgaudit** — audit logging, not linting. Different category.
+- **ORMs** (Prisma, SQLAlchemy, Django, TypeORM) — construct
+  queries; don't lint policies.
+- **DB observability** (pgwatch, Datadog) — different category.

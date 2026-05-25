@@ -5,102 +5,67 @@ nav_order: 30
 permalink: /comparisons/atlas/
 ---
 
-# pgrls vs. Atlas
+# pgrls vs. Atlas — do I need both?
 
-**Different layers of the same stack. Strongly complementary.**
+**Short answer: yes, if you're using Atlas to manage RLS.** Atlas
+*writes* and *applies* your policies as code. pgrls *audits* what
+those policies do once applied. The roles are different layers of
+the same workflow.
 
-[Atlas](https://github.com/ariga/atlas) (Ariga) is a declarative
-database-schema-management tool — schema-as-code, automated migration
-generation, 50+ safety analyzers for DDL, and notably **explicit
-support for managing row-level security policies as version-controlled
-code** alongside roles and permissions.
+## The kind of bug each one catches
 
-**pgrls** is a Row-Level Security policy **linter** for Postgres. It
-introspects a live database and flags semantic bugs in the *enforced*
-policies (broken row scoping, inverted auth, missing `WITH CHECK`,
-`BYPASSRLS` roles, view-mediated bypasses).
+**Atlas** ([github.com/ariga/atlas](https://github.com/ariga/atlas))
+fires on migration / schema hazards like this:
 
-The relationship is not "vs" so much as "and." Atlas *writes* and
-*migrates* RLS policies; pgrls *audits* them. The right CI stack for
-a Postgres team running RLS uses both.
+```sql
+-- Atlas refuses to migrate this without manual ack:
+DROP COLUMN owner_id;     -- destructive, possibly data-losing
+```
 
-## At a glance
+It has 50+ analyzers covering destructive changes, lock-held
+operations, drift detection — the migration-safety layer.
 
-|                                | Atlas                                                            | pgrls                                                  |
-| ------------------------------ | ---------------------------------------------------------------- | ------------------------------------------------------ |
-| Primary function               | Schema management (declarative + versioned migrations)           | RLS policy linter                                      |
-| Defines policies?              | Yes (RLS policies as code, alongside roles + permissions)        | No (it audits what's already there)                    |
-| Migrates policies?             | Yes (declarative apply / versioned migrations)                   | No                                                     |
-| Lints policy *semantics*?      | Custom rules possible; no out-of-the-box RLS-semantic catalogue  | Yes — 43 rules tuned to RLS specifically               |
-| Database support               | Postgres, MySQL, MSSQL, SQLite, Oracle, Snowflake, ClickHouse, … | Postgres only                                          |
-| Safety analyzers               | 50+ DDL/migration analyzers (destructive change, locks, drift)   | 43 RLS-correctness rules + 12 auto-fixers              |
-| Semantic policy-diff?          | Migration-level diff (declarative ↔ database)                    | Semantic *access-widening* classifier (SAFE / BREAKING / REQUIRES_REVIEW / DANGEROUS) |
-| CI integration                 | GH Actions, GitLab, CircleCI, Bitbucket, Azure, Kubernetes Op., Terraform | GitHub Action, pre-commit, every output format         |
-| Auto-fix RLS bugs?             | No (Atlas generates the *intended* policy; it doesn't catch bugs in the intent) | Yes for 12 of 43 rules |
+**pgrls** fires on a different class of bug. Even if Atlas applies
+your policy cleanly, this still ships:
 
-## What Atlas does that pgrls does not
+```sql
+CREATE POLICY admins_only ON public.documents
+    FOR ALL TO authenticated
+    USING (auth.jwt() -> 'user_metadata' ->> 'role' = 'admin');
+```
 
-- **Manages the full database schema** (tables, columns, indexes,
-  constraints, views, triggers, AND RLS policies + roles + permissions)
-  as version-controlled code. pgrls only reads; it doesn't manage or
-  migrate.
-- **Generates migrations** automatically from a declarative target
-  state (HCL/SQL).
-- **50+ DDL safety analyzers** for destructive changes, table locks,
-  backward incompatibility, drift detection — the migration-safety
-  layer (overlap with squawk on that axis).
-- **Multi-database**: works the same against Postgres, MySQL, MSSQL,
-  Oracle, Snowflake, and more.
-- **Schema-as-code workflows** (Terraform provider, Kubernetes
-  Operator, ArgoCD support) for teams that treat the database the
-  way they treat infrastructure.
-- **Drift detection** between declared and actual schema.
+`user_metadata` is end-user writable via Supabase's auth API
+(`supabase.auth.updateUser({ data: { role: 'admin' }})`). Atlas
+applied a policy that's *syntactically valid* but
+*semantically self-bypassable*. pgrls flags it as **SEC033**.
 
-## What pgrls does that Atlas does not
+## Capability check
 
-- **RLS-specific bug catalogue**: 43 rules targeting the semantic
-  bugs that ship past code review even when the policy "looks
-  correct." Atlas validates that a policy *exists as declared*; pgrls
-  validates that it *enforces what you meant*. The two are distinct:
-  - `auth.uid() IS NULL OR owner = auth.uid()` is a valid CREATE
-    POLICY (Atlas applies it cleanly) AND silently leaks every row
-    to anonymous clients (pgrls flags it as SEC004).
-  - A policy that scopes by `tenant_id` but not by `owner_id` is a
-    syntactically clean Atlas declaration that leaks per-user data
-    inside a tenant (pgrls flags it as SEC027).
-- **Mechanical fixers** for 12 rules — emit `DROP POLICY`,
-  `ALTER POLICY`, `CREATE INDEX` SQL ready to feed into the next
-  migration (which Atlas, in turn, can then apply).
-- **Semantic policy-diff** that asks specifically *"did access
-  widen?"* — orthogonal to Atlas's structural drift detection.
-- **`pgrls.testing`** pytest plugin for actual RLS isolation tests
-  (role switching, per-test transactions, tenant-isolation assertions)
-  — runtime verification that the deployed policies do what their
-  declaration claims.
+|                                       | Atlas              | pgrls |
+| ------------------------------------- | :---:              | :---: |
+| Manages schema as code                | ✓                  | —     |
+| Generates migrations                  | ✓                  | —     |
+| 50+ DDL safety analyzers              | ✓                  | —     |
+| Catches RLS bypass / semantic bugs    | —                  | ✓ (46 rules) |
+| Auto-fix RLS findings                 | —                  | ✓ (12 of 46) |
+| Multi-database                        | ✓ (PG/MySQL/MSSQL/…) | — (Postgres only) |
 
-## Use them together
+## Wire them together
 
 The natural pipeline:
 
-1. **Atlas** owns the schema (incl. RLS policies + roles) as
-   declarative code, generates migrations, runs its DDL safety
-   analyzers.
-2. **pgrls** runs against the migrated database (or, during
-   development, against an `atlas schema apply --dry-run` preview)
-   and audits the *semantics* of the policies Atlas just applied.
-3. The 12 auto-fixable pgrls rules emit SQL that goes back into
-   Atlas as the next migration.
+```
+1. Atlas — writes RLS policies as declarative code, generates the migration.
+2. CI applies the migration.
+3. pgrls — reads the resulting catalog, audits the policies' semantics.
+4. pgrls fix output (for 12 rule classes) → next Atlas migration.
+```
 
-No tool replaces the other — they sit at different layers. Atlas
-asks *"is the schema what we declared?"* pgrls asks *"does the
-declared schema actually enforce what we meant?"*
+Atlas guarantees the policy is applied as written. pgrls verifies
+that what was written is actually correct.
 
-## Honest summary
+## Verdict
 
-If a Postgres team picks Atlas to manage its RLS policies, that's a
-good fit and pgrls makes it better — Atlas guarantees the policies
-are applied as written, pgrls audits whether they're written
-correctly. The combination is stronger than either alone. The only
-"vs" framing that holds up is *RLS-specific lint catalogue*: Atlas
-has 50+ general migration analyzers but no out-of-the-box RLS-semantic
-rules; pgrls has 43 rules tuned exclusively to RLS correctness.
+Use both. Atlas asks *"is the schema in the database what we
+declared?"* pgrls asks *"does the declared schema actually enforce
+what we meant?"* No overlap on findings; full coverage when stacked.

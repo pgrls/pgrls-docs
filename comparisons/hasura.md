@@ -5,101 +5,84 @@ nav_order: 130
 permalink: /comparisons/hasura/
 ---
 
-# pgrls vs. Hasura
+# pgrls + Hasura — if I use Hasura, do I need pgrls?
 
-**Different layers. Hasura permissions are not RLS — pgrls only sees
-the RLS half.**
+**Depends.** Hasura permissions are *engine-level* — they're enforced
+by the Hasura layer, not by Postgres RLS. So pgrls's answer splits
+two ways:
 
-[Hasura](https://hasura.io) is a GraphQL API server over Postgres
-(and other databases). Its authorization model is **engine-level,
-not database-level**: roles, permissions, and row filters are declared
-in Hasura's metadata, and the Hasura Engine enforces them when
-translating a GraphQL query into SQL. The official docs are explicit:
-*"Hasura roles and permissions are implemented at the Hasura Engine
-layer. They have no relationship to database users and roles."*
+- **Hasura-only setup, no direct DB access** → pgrls has nothing to
+  audit. Hasura permissions live in metadata, not in Postgres; pgrls
+  reads Postgres.
+- **Hasura + RLS layered in for defence-in-depth** → pgrls is the
+  audit layer for that RLS. This is the growing pattern for teams
+  worried about non-Hasura DB access (BI tools, admin scripts,
+  Lambda workers, compromised admin tokens).
 
-**pgrls** is a Postgres Row-Level Security linter. It reads the
-database catalog and audits the policies Postgres itself will
-enforce. It cannot see Hasura's metadata-driven permission rules —
-those live in Hasura, not Postgres.
+## How Hasura and RLS differ
 
-So the two are at different layers. The question becomes: *do you
-have RLS at all under a Hasura deployment?*
+Hasura's docs are explicit: *"Hasura roles and permissions are
+implemented at the Hasura Engine layer. They have no relationship
+to database users and roles."*
 
-## At a glance
+That means:
 
-|                                | Hasura                                                          | pgrls                                                  |
-| ------------------------------ | --------------------------------------------------------------- | ------------------------------------------------------ |
-| Authorization layer            | Hasura Engine (metadata-driven, role+permission rules)          | Postgres database (RLS policies + grants)              |
-| Where rules live               | Hasura metadata (Git-versioned via Hasura CLI)                  | Postgres `CREATE POLICY` statements                    |
-| Enforced by                    | Hasura Engine, before the query reaches Postgres                | Postgres planner, for every query                      |
-| Bypasses Hasura?               | n/a                                                             | Direct DB connections bypass Hasura entirely           |
-| Lintable by pgrls?             | No — pgrls reads the DB, not Hasura metadata                    | n/a                                                    |
-| Recommended for defence-in-depth? | Some teams add RLS on top                                    | Catches the RLS layer if you have one                  |
+```yaml
+# Hasura metadata — enforced by Hasura, invisible to Postgres
+- table: documents
+  permissions:
+    select:
+      filter:
+        owner_id: { _eq: X-Hasura-User-Id }
+```
 
-## When pgrls is relevant to a Hasura project
+A direct `psql` connection bypasses this completely. The only thing
+that constrains a non-Hasura caller is what Postgres itself enforces
+— which is RLS, if you've enabled it.
 
-Two scenarios:
+## When pgrls is relevant
 
-### 1. You use Hasura permissions only — pgrls has nothing to add
+If you've layered RLS in *under* Hasura, this is the bug class pgrls
+catches that nothing else does:
 
-If your Hasura app does all its authorization via Hasura permissions
-and no Postgres user ever connects directly (no admin tooling, no BI
-tools, no Celery workers, no `psql` for debugging in production),
-then RLS is an empty defence-in-depth layer and pgrls has nothing to
-audit. The Hasura permissions are where the policy decisions live;
-auditing those is a Hasura-tooling problem, not a Postgres one.
+```sql
+-- The defence-in-depth RLS policy you wrote on the same table:
+CREATE POLICY tenant_read ON public.documents
+    FOR SELECT
+    USING (auth.uid() IS NULL OR owner_id = auth.uid());
+```
 
-### 2. You use RLS as defence-in-depth under Hasura — pgrls is the audit layer
+If your Hasura permissions are correct but the RLS layer has this
+bug, a direct DB connection sees every row — anonymous or
+otherwise. Hasura's metadata-validation tools won't surface it (they
+don't read Postgres policies). pgrls flags it as **SEC004**.
 
-A growing pattern: declare RLS policies on the Postgres tables Hasura
-fronts, so that even if a non-Hasura client connects directly (a
-backup script, an analyst's `psql` session, a Lambda task, a
-compromised Hasura admin token), the database refuses to return the
-wrong rows. RLS is the floor under Hasura's ceiling.
+## Capability check
 
-This is the pattern pgrls is built for. In this setup, pgrls runs
-against the same Postgres Hasura connects to and validates that the
-RLS layer doesn't have the bugs that ship past code review — the
-same 43 rules apply (SEC004, SEC027, SEC030, SEC018, PERF001/003/004,
-VIEW001–004, …).
+|                                          | Hasura | pgrls |
+| ---------------------------------------- | :---:  | :---: |
+| GraphQL API + permissions metadata       | ✓      | —     |
+| Permissions enforced by Hasura engine    | ✓      | —     |
+| Audits Postgres RLS policies             | —      | ✓     |
+| Audits Hasura metadata permissions       | —      | —     |
+| Useful for direct-DB-access scenarios    | —      | ✓     |
 
-## What Hasura does that pgrls does not
+## Wire pgrls in (if you have RLS)
 
-- **Role+permission rules in metadata** — declared in Hasura, edited
-  in the Hasura console, version-controlled via the Hasura CLI.
-- **GraphQL-level enforcement** — permissions narrow the GraphQL
-  surface (which fields, which row filters) before the query reaches
-  Postgres.
-- **Engine-side auditing** — Hasura has its own validation for
-  permission consistency (e.g., the console flags conflicts).
+```yaml
+- uses: pgrls/pgrls-action@v1
+  with:
+    database-url: ${{ secrets.HASURA_DB_URL }}
+    schemas: public
+```
 
-## What pgrls does that Hasura does not
+## Verdict
 
-- **Static analysis of Postgres RLS policies.** Hasura permissions
-  are separate from RLS; pgrls only sees the RLS layer.
-- **Reads what the database itself will enforce** — orthogonal to
-  what Hasura's metadata says, and the only thing that matters when a
-  non-Hasura client connects directly.
-- **CI-native rule enforcement** for the bugs that ship past code
-  review (SEC004 et al.).
-
-## When you'd use pgrls on a Hasura project
-
-- **If you've added RLS as defence-in-depth under Hasura** (the
-  common pattern for teams worried about non-Hasura DB access),
-  pgrls is the audit layer for that RLS.
-- **If you're migrating off Hasura** to direct-Postgres access
-  (PostgREST, a custom backend), the RLS layer becomes load-bearing
-  and pgrls is the way to verify it before the cutover.
-- **If you allow analyst tools or admin scripts to connect directly
-  to Postgres**, RLS is the only authorization mechanism that
-  applies to them — pgrls audits whether it works.
-
-## Honest summary
-
-Hasura permissions and RLS are different layers, not interchangeable.
-pgrls only audits the RLS half. For a Hasura-only setup with no
-direct DB access, pgrls has nothing to do; for any setup that uses
-RLS as defence-in-depth (which is a good idea), pgrls is the audit
-tool.
+- **Pure Hasura, no direct DB access?** Skip pgrls. Hasura's own
+  metadata tooling is the audit layer.
+- **RLS layered in for defence-in-depth?** pgrls is the audit tool.
+- **Migrating off Hasura?** RLS becomes load-bearing; lint it before
+  the cutover.
+- **Analyst tools or admin scripts connect directly?** Then RLS is
+  the only authorization that applies to them — pgrls audits whether
+  it works.

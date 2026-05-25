@@ -5,80 +5,71 @@ nav_order: 60
 permalink: /comparisons/snyk-code/
 ---
 
-# pgrls vs. Snyk Code
+# pgrls vs. Snyk Code — do I need both?
 
-**Different artifacts. Coexistence, not competition.**
+**Short answer: yes.** Snyk Code is a commercial SAST that scans
+your application code. pgrls scans your live database's RLS
+policies. They look at different artifacts and never overlap on
+findings.
 
-[Snyk Code](https://snyk.io/product/snyk-code/) is **commercial,
-dev-focused SAST** — scans source code for security vulnerabilities,
-prioritises by risk, and offers auto-fix suggestions. It integrates
-into PRs, IDEs, and CI/CD. Its rule coverage is the conventional
-app-sec set (taint analysis, injection, deserialization, dependency
-confusion, etc.); Snyk Code's public documentation does **not list any
-out-of-the-box rules for Postgres Row-Level Security policies.**
+## The kind of bug each one catches
 
-**pgrls** is a Postgres Row-Level Security linter that runs against a
-live database catalog. It analyses every policy's `USING` and
-`WITH CHECK` predicates as ASTs and flags the semantic bugs that get
-past code review.
+**Snyk Code** ([snyk.io/product/snyk-code](https://snyk.io/product/snyk-code/))
+fires on app-layer bugs like this:
 
-The two don't compete. Snyk Code asks *"is the calling application
-code safe?"* pgrls asks *"does the database refuse to return the wrong
-rows when the application code messes up?"*
+```java
+// Snyk catches this:
+String sql = "SELECT * FROM documents WHERE id = " + userId;
+ResultSet rs = stmt.executeQuery(sql);
+// ← SQL injection: user input concatenated into a query.
+```
 
-## At a glance
+It also catches hardcoded secrets, dangerous deserialization, broken
+auth patterns. Snyk Code's public documentation does not list any
+built-in rules for Postgres Row-Level Security policies.
 
-|                          | Snyk Code                                         | pgrls                                                  |
-| ------------------------ | ------------------------------------------------- | ------------------------------------------------------ |
-| Scope                    | Application source code (SAST)                    | Live Postgres database                                 |
-| Cost model               | Commercial (per-developer SaaS)                   | MIT-licensed open source                               |
-| RLS coverage             | None documented                                   | 43 rules tuned to RLS                                  |
-| Auto-fix                 | "DeepCode AI" suggestions for many rules          | 12 of 43 rules, emit `.sql` migration                  |
-| Where the bug is found   | In the code that talks to the database            | In the database that enforces access                   |
-| Output                   | Snyk dashboard, PR comments, IDE                  | SARIF / JSON / GH annotations / Markdown / JUnit / text |
-| CI integration           | Snyk CLI in pipeline, GitHub App                  | GitHub Action, pre-commit                              |
+**pgrls** fires on bugs in the database that's supposed to refuse
+the wrong rows even when the application code messes up:
 
-## What Snyk Code does that pgrls does not
+```sql
+CREATE POLICY tenant_read ON public.documents
+    FOR SELECT
+    USING (auth.uid() IS NULL OR owner_id = auth.uid());
+```
 
-- **Application-layer security across many languages** — taint
-  analysis for injection, hardcoded secrets, deserialization,
-  authentication issues in the calling code.
-- **Dev-workflow polish** — IDE inline suggestions, PR-blocking
-  policy, risk prioritisation across an organisation's portfolio.
-- **Cross-tool security platform** (Snyk Open Source for SCA, Snyk
-  Container, Snyk IaC) for teams standardised on Snyk.
+If a Snyk Code finding gets shipped past review, the database's RLS
+should be the last line. This policy isn't — `auth.uid() IS NULL`
+admits every row to anonymous clients. pgrls flags it as **SEC004**.
 
-## What pgrls does that Snyk Code does not
+## Capability check
 
-- **Reads live database state.** Snyk Code looks at source files;
-  pgrls looks at the actually-enforced policy catalogue, including
-  what an ORM or hot-fix applied without going through migration
-  source control.
-- **AST-level reasoning about RLS predicates** — catches
-  `auth.uid() IS NULL OR …` (SEC004), missing per-user scoping
-  (SEC027), nullable discriminator columns (SEC030), and 40 other
-  RLS-specific bugs.
-- **Mechanical auto-fix for RLS** — emits `DROP POLICY` /
-  `CREATE INDEX` SQL ready for the next migration.
-- **Semantic policy-diff** with access-widening classification
-  (`pgrls diff`).
-- **`pgrls.testing`** pytest plugin for RLS isolation tests.
+|                                       | Snyk Code | pgrls |
+| ------------------------------------- | :---:     | :---: |
+| App-layer security across many langs  | ✓         | —     |
+| Catches RLS bypass / row-leak bugs    | —         | ✓     |
+| Reads source files                    | ✓         | —     |
+| Reads live Postgres catalog           | —         | ✓     |
+| Cost model                            | Commercial | MIT OSS |
+| Output                                | Snyk dashboard + IDE | SARIF / JSON / GH annotations / Markdown / JUnit / text |
 
-## Use them together
+## Wire pgrls next to Snyk
 
-Two distinct layers of the same defence-in-depth:
+Snyk Code lives in its own dashboard. pgrls emits SARIF, which you
+can also ingest into Snyk via its custom-finding API — or into
+GitHub Code Scanning, where you get a unified view across both.
 
-- **Snyk Code** flags an SQL-injection or auth-bypass pattern in the
-  application code that *talks to* the database.
-- **pgrls** flags whether the database's RLS policies actually
-  enforce the access control the application code assumed.
+```yaml
+- uses: pgrls/pgrls-action@v1
+  with:
+    format: sarif
+    output: pgrls.sarif
+- uses: github/codeql-action/upload-sarif@v3
+  with:
+    sarif_file: pgrls.sarif
+```
 
-Either tool catching its finding without the other still leaves the
-opposite layer exposed.
+## Verdict
 
-## Honest summary
-
-If a team already runs Snyk Code, pgrls slots in next to it (same
-SARIF output → same Code Scanning dashboard, or wire to Snyk's
-custom-find ingestion). The two ask different questions of different
-artifacts.
+Use both. Snyk Code covers what your code does. pgrls covers what
+your database enforces. Either tool catching its finding without
+the other still leaves the opposite layer exposed.

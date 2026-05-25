@@ -5,89 +5,80 @@ nav_order: 110
 permalink: /comparisons/supabase/
 ---
 
-# pgrls vs. Supabase
+# pgrls + Supabase — if I use Supabase, do I need pgrls?
 
-**Not "vs." — pgrls audits the policies you write with Supabase.**
+**Short answer: yes, especially.** Supabase ships the RLS engine
+(`auth.uid()`, `auth.role()`, `auth.jwt()`, the `anon` /
+`authenticated` / `service_role` triad). It does not ship a linter
+for the policies you write against that engine. pgrls is the
+missing piece.
 
-[Supabase](https://supabase.com) is a Backend-as-a-Service built
-around Postgres + RLS — it provides the database, the auth layer
-(`auth.uid()` / `auth.role()` / `auth.jwt()`), the storage layer, the
-realtime channels, the `anon` / `authenticated` / `service_role`
-roles, and the dashboard for managing policies. RLS is the
-load-bearing authorization mechanism in a Supabase app.
+## The kind of bug pgrls catches that Supabase doesn't
 
-What Supabase **does not** ship is a linter for the RLS policies you
-write. The official RLS guide
-([supabase.com/docs/guides/database/postgres/row-level-security](https://supabase.com/docs/guides/database/postgres/row-level-security))
-shows policy patterns, recommends `auth.uid() IS NOT NULL AND
-auth.uid() = user_id` to prevent silent failures for unauthenticated
-users, and points at the community
-[`usebasejump/supabase-test-helpers`](https://github.com/usebasejump/supabase-test-helpers)
-repo for testing — but there is no "is my policy actually correct?"
-checker in the Supabase CLI, dashboard, or docs.
+Supabase docs warn about *some* of these and the rest fly under the
+radar. The two that bite hardest in real-world Supabase codebases:
 
-**pgrls** is that checker. It connects to a Supabase database (any
-Postgres, really — Supabase is just the most common deployment surface)
-and runs 43 rules over every policy.
+**(1) `IS NULL OR …` admits every row to anonymous clients.**
 
-## At a glance
+```sql
+CREATE POLICY tenant_read ON public.documents
+    FOR SELECT
+    USING (auth.uid() IS NULL OR owner_id = auth.uid());
+```
 
-|                            | Supabase                                                    | pgrls                                                                  |
-| -------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------- |
-| Role                       | Hosted Postgres + auth + storage + realtime + dashboard     | Static analyzer for the policies in that Postgres                      |
-| Provides the RLS engine    | Yes (Postgres RLS, via the `auth.*` helpers)                | No — only audits                                                       |
-| Ships an RLS linter        | No                                                          | Yes                                                                    |
-| Cost                       | Hosted SaaS (free tier + paid plans)                        | MIT-licensed open source                                               |
-| Testing recommendation     | Community `supabase-test-helpers` (pgTAP / dbdev)           | `pgrls.testing` pytest plugin (role switching + isolation assertions)  |
-| Where the bug is caught    | Runtime, in production, when a user notices                 | CI, before the policy ever ships                                       |
+`auth.uid()` returns NULL for unauthenticated requests; the `IS
+NULL` branch is true; the `OR` short-circuits; anonymous clients see
+every row. The Supabase RLS docs explicitly recommend writing this
+the other way (`IS NOT NULL AND … = auth.uid()`) — but nothing
+checks that you did. pgrls flags it as **SEC004**.
 
-## The bugs Supabase docs already warn about — and pgrls catches
+**(2) `user_metadata` is end-user writable.**
 
-The Supabase docs explicitly call out that `auth.uid()` returns
-`NULL` for unauthenticated requests, and they recommend writing
-`auth.uid() IS NOT NULL AND auth.uid() = user_id`. That's exactly
-the warning behind **SEC004**: the moment a policy is written as
-`auth.uid() IS NULL OR user_id = auth.uid()` (the natural-language
-inversion that looks correct in English), it admits every row to
-anonymous clients. The docs flag it as a footgun; pgrls flags it as
-a CI-blocking finding.
+```sql
+USING (auth.jwt() -> 'user_metadata' ->> 'role' = 'admin')
+```
 
-Beyond SEC004, pgrls covers the patterns Supabase docs don't
-explicitly call out:
+Any authenticated user calls
+`supabase.auth.updateUser({ data: { role: 'admin' }})` from the
+client SDK; the next JWT carries it; the policy reads it; the user
+is admin. The safe counterpart is `app_metadata`
+(service-role-only). pgrls flags this as **SEC033**.
 
-- **SEC027** — tenant-scoped policies that forget per-user scoping
-  inside a tenant.
-- **SEC030** — nullable discriminator columns that silently hide
-  rows (and that flip to *exposing* them under any NULL-tolerant
-  policy form).
-- **SEC018** — `current_user` used as a tenant key (which collapses
-  under Supabase's connection pooling and shared roles).
-- **PERF001** — `auth.uid()` evaluated per row instead of wrapped in
-  `(SELECT auth.uid())` (the docs *do* recommend the wrapper for
-  performance; pgrls flags every policy that didn't get the memo).
-- **PERF003 / PERF004** — policies filtering on un-indexed or
-  function-wrapped columns that defeat plain B-tree indexes.
+## Capability check
 
-## When you'd use pgrls on a Supabase project
+|                                       | Supabase | pgrls |
+| ------------------------------------- | :---:    | :---: |
+| Hosted Postgres + auth + storage      | ✓        | —     |
+| Provides the RLS engine               | ✓        | —     |
+| Ships a CI linter for RLS policies    | —        | ✓     |
+| Catches the `IS NULL OR …` footgun    | docs warn | flags & fails CI |
+| Catches the `user_metadata` bypass    | —        | ✓     |
+| Per-row perf trap (PERF001 wrap)      | docs recommend | flags every miss |
+| Bug surfaces in CI vs in production   | production | CI |
 
-- **Pre-launch RLS audit.** Run `pgrls lint` against your project
-  before opening the service to real users. Catches the policies
-  that "look correct" but leak.
-- **CI gate on every PR.** Apply your migrations to a CI Postgres
-  (or `supabase start` a local stack), then run pgrls. New policies
-  are checked the same way you'd check unit tests.
-- **Adopting on an existing project.** `pgrls lint --baseline`
-  records what's currently flagged so CI only fails on *new*
-  findings — adopt today without a clean-up sprint.
+## Wire pgrls into a Supabase project
 
-## See also
+`supabase start` runs a local Postgres; pgrls runs against it:
 
-- The [Supabase recipe in the pgrls repo](https://github.com/pgrls/pgrls/blob/main/docs/recipes/supabase.md)
-  walks through `supabase start`-based CI + the SEC004 + SEC027 +
-  SEC030 trio that dominates Supabase RLS bugs.
+```yaml
+- run: supabase start
+- run: pgrls lint --database-url "$(supabase status -o env | grep DB_URL | cut -d= -f2)" --schemas public
+```
 
-## Honest summary
+Or the one-liner in GitHub Actions (uses your hosted DB URL from a
+secret):
 
-pgrls is built specifically for the Supabase pattern of
-RLS-as-authorization. Supabase ships the engine; pgrls ships the
-checker. Using both is the obvious move.
+```yaml
+- uses: pgrls/pgrls-action@v1
+  with:
+    database-url: ${{ secrets.SUPABASE_DB_URL }}
+    schemas: public
+```
+
+## Verdict
+
+Supabase ships the engine; pgrls ships the linter. Using both is the
+default sane setup. Most Supabase RLS bugs that ship to production
+fall into one of the rule classes pgrls already catches — see the
+[Supabase recipe](https://github.com/pgrls/pgrls/blob/main/docs/recipes/supabase.md)
+for the canonical CI wire-up.
