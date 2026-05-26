@@ -22,8 +22,6 @@ want is linked below. Each one answers the same three questions:
   correctness; use both, squawk pre-apply, pgrls post-apply.
 - [**pgrls vs Atlas**](atlas/) — schema management vs policy linter;
   Atlas writes the policies, pgrls audits them.
-- [**pgrls vs migra**](migra/) — migra was a schema-diff tool
-  (deprecated 2022); `pgrls diff` is unrelated.
 
 ## Generic SAST
 
