@@ -9,10 +9,10 @@ permalink: /
 # pgrls
 
 A **static analyzer for Postgres Row-Level Security**. Connects to a
-live database, runs 44 rules over every policy, and flags the
+live database, runs 51 rules over every policy, and flags the
 semantic bugs (broken row scoping, inverted auth checks, missing
 `WITH CHECK`, `BYPASSRLS` roles, view-mediated bypasses) that eyeball
-review misses. 12 of the 44 rules mechanically auto-fix. MIT,
+review misses. 17 of the 51 rules mechanically auto-fix. MIT,
 Python 3.11+, tested PostgreSQL 15–17.
 
 ```bash
@@ -21,7 +21,7 @@ export DATABASE_URL='postgres://…'
 pgrls lint
 ```
 
-## New in 0.6.1 — SEC033
+## A Supabase footgun pgrls catches — SEC033
 
 A Supabase RLS policy that gates on `user_metadata` is
 **self-bypassable** in one line of client code:
@@ -42,7 +42,7 @@ severity `error` — fails CI on first sight. Released 2026-05-24.
 - **[Quickstart](https://github.com/pgrls/pgrls/blob/main/docs/QUICKSTART.md)** —
   5 minutes from `pip install` to a real RLS finding.
 - **[Rule reference (AGENTS.md)](https://github.com/pgrls/pgrls/blob/main/AGENTS.md)** —
-  all 44 rules, each with detection logic, severity, and remediation.
+  all 51 rules, each with detection logic, severity, and remediation.
 - **[GitHub Action on the Marketplace](https://github.com/marketplace/actions/pgrls-postgres-rls-linter)** —
   one-line CI integration.
 - **[CHANGELOG](https://github.com/pgrls/pgrls/blob/main/CHANGELOG.md)**.
@@ -63,5 +63,5 @@ CREATE POLICY tenant_read ON public.documents
 Reads correct in English; ships past code review; admits **every row**
 to unauthenticated clients because `auth.uid()` returns NULL for any
 session without a JWT, the `IS NULL` branch is true, the `OR`
-short-circuits. pgrls flags it as **SEC004** in milliseconds. 42 other
+short-circuits. pgrls flags it as **SEC004** in milliseconds. 50 other
 rules cover the rest of the RLS bug space.

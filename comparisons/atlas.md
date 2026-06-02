@@ -46,8 +46,8 @@ applied a policy that's *syntactically valid* but
 | Manages schema as code                | ✓                  | —     |
 | Generates migrations                  | ✓                  | —     |
 | 50+ DDL safety analyzers              | ✓                  | —     |
-| Catches RLS bypass / semantic bugs    | —                  | ✓ (46 rules) |
-| Auto-fix RLS findings                 | —                  | ✓ (12 of 46) |
+| Catches RLS bypass / semantic bugs    | —                  | ✓ (51 rules) |
+| Auto-fix RLS findings                 | —                  | ✓ (17 of 51) |
 | Multi-database                        | ✓ (PG/MySQL/MSSQL/…) | — (Postgres only) |
 
 ## Wire them together
@@ -58,7 +58,7 @@ The natural pipeline:
 1. Atlas — writes RLS policies as declarative code, generates the migration.
 2. CI applies the migration.
 3. pgrls — reads the resulting catalog, audits the policies' semantics.
-4. pgrls fix output (for 12 rule classes) → next Atlas migration.
+4. pgrls fix output (for 17 rule classes) → next Atlas migration.
 ```
 
 Atlas guarantees the policy is applied as written. pgrls verifies
