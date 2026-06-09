@@ -12,7 +12,10 @@ A **static analyzer for Postgres Row-Level Security**. Connects to a
 live database, runs 51 rules over every policy, and flags the
 semantic bugs (broken row scoping, inverted auth checks, missing
 `WITH CHECK`, `BYPASSRLS` roles, view-mediated bypasses) that eyeball
-review misses. 17 of the 51 rules mechanically auto-fix. MIT,
+review misses. For the costliest footgun — a policy that leaks every
+row to anonymous users — pgrls goes past pattern-matching and runs the
+**Z3 SMT solver** to *prove* the leak (SEC038). 17 of the 51 rules
+mechanically auto-fix. MIT,
 Python 3.11+, tested PostgreSQL 15–17.
 
 ```bash
@@ -63,5 +66,9 @@ CREATE POLICY tenant_read ON public.documents
 Reads correct in English; ships past code review; admits **every row**
 to unauthenticated clients because `auth.uid()` returns NULL for any
 session without a JWT, the `IS NULL` branch is true, the `OR`
-short-circuits. pgrls flags it as **SEC004** in milliseconds. 50 other
-rules cover the rest of the RLS bug space.
+short-circuits. pgrls flags it as **SEC004** in milliseconds — and
+catches the *disguised* variants (a `NOT (… IS NOT NULL)` inversion, a
+`COALESCE` wrapper) as **SEC038**, which runs the Z3 SMT solver to
+**prove** the policy is unconditionally true for an anonymous session —
+semantic detection no regex can match. 49 other rules cover the rest of
+the RLS bug space.
