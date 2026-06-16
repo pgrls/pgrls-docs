@@ -49,7 +49,7 @@ Postgres's `pg_policy` catalog, not source text. pgrls flags it as
 | Catches RLS bypass / row-leak bugs       | —       | ✓     |
 | Reads source files                       | ✓       | —     |
 | Reads live Postgres catalog              | —       | ✓     |
-| Auto-fix                                 | ✓       | ✓ (17 of 51 rules) |
+| Auto-fix                                 | ✓       | ✓ (17 of 57 rules) |
 
 ## Why you can't just write RLS rules in Semgrep
 

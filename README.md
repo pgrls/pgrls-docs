@@ -9,7 +9,7 @@ Live at **https://pgrls.github.io/pgrls-docs/**.
 
 - `index.md` — landing page.
 - `comparisons/` — pgrls vs adjacent tools (sqlfluff, Atlas, Semgrep,
-  CodeQL, Snyk, squawk, migra) and ecosystem positioning (Supabase,
+  CodeQL, Snyk, squawk) and ecosystem positioning (Supabase,
   PostgREST, Hasura).
 - `_config.yml` — Jekyll + [Just the Docs](https://just-the-docs.com)
   remote theme.

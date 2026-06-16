@@ -46,8 +46,8 @@ applied a policy that's *syntactically valid* but
 | Manages schema as code                | ✓                  | —     |
 | Generates migrations                  | ✓                  | —     |
 | 50+ DDL safety analyzers              | ✓                  | —     |
-| Catches RLS bypass / semantic bugs    | —                  | ✓ (51 rules) |
-| Auto-fix RLS findings                 | —                  | ✓ (17 of 51) |
+| Catches RLS bypass / semantic bugs    | —                  | ✓ (57 rules) |
+| Auto-fix RLS findings                 | —                  | ✓ (17 of 57) |
 | Multi-database                        | ✓ (PG/MySQL/MSSQL/…) | — (Postgres only) |
 
 ## Wire them together
