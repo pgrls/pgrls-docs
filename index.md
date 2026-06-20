@@ -52,6 +52,8 @@ severity `error` — fails CI on first sight. Released 2026-05-24.
 
 ## On this site
 
+- **[Verify — the prover](verify/)** — `pgrls verify` proves tenant isolation
+  with Z3 (reads *and* writes) and confirms the proof against your live database.
 - **[Comparisons](comparisons/)** — pgrls vs adjacent tools and how it
   fits with Postgres ecosystems (Supabase, PostgREST, Hasura, Django).
 
