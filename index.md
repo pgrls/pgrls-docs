@@ -9,12 +9,12 @@ permalink: /
 # pgrls
 
 A **static analyzer for Postgres Row-Level Security**. Connects to a
-live database, runs 60 rules over every policy, and flags the
+live database, runs 61 rules over every policy, and flags the
 semantic bugs (broken row scoping, inverted auth checks, missing
 `WITH CHECK`, `BYPASSRLS` roles, view-mediated bypasses) that eyeball
 review misses. For the costliest footgun — a policy that leaks every
 row to anonymous users — pgrls goes past pattern-matching and runs the
-**Z3 SMT solver** to *prove* the leak (SEC038). 19 of the 60 rules
+**Z3 SMT solver** to *prove* the leak (SEC038). 20 of the 61 rules
 mechanically auto-fix. MIT,
 Python 3.11+, tested PostgreSQL 15–17.
 
@@ -45,7 +45,7 @@ severity `error` — fails CI on first sight. Released 2026-05-24.
 - **[Quickstart](https://github.com/pgrls/pgrls/blob/main/docs/QUICKSTART.md)** —
   5 minutes from `pip install` to a real RLS finding.
 - **[Rule reference (AGENTS.md)](https://github.com/pgrls/pgrls/blob/main/AGENTS.md)** —
-  all 60 rules, each with detection logic, severity, and remediation.
+  all 61 rules, each with detection logic, severity, and remediation.
 - **[GitHub Action on the Marketplace](https://github.com/marketplace/actions/pgrls-postgres-rls-linter)** —
   one-line CI integration.
 - **[CHANGELOG](https://github.com/pgrls/pgrls/blob/main/CHANGELOG.md)**.
@@ -72,5 +72,5 @@ short-circuits. pgrls flags it as **SEC004** in milliseconds — and
 catches the *disguised* variants (a `NOT (… IS NOT NULL)` inversion, a
 `COALESCE` wrapper) as **SEC038**, which runs the Z3 SMT solver to
 **prove** the policy is unconditionally true for an anonymous session —
-semantic detection no regex can match. 58 other rules cover the rest of
+semantic detection no regex can match. 59 other rules cover the rest of
 the RLS bug space.

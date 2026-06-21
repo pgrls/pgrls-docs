@@ -46,7 +46,7 @@ it as **SEC004**.
 | Catches RLS bypass / row-leak bugs    | —      | ✓     |
 | Reads `.sql` migration files          | ✓      | —     |
 | Reads live Postgres catalog           | —      | ✓     |
-| Auto-fix                              | —      | ✓ (17 of 57 rules) |
+| Auto-fix                              | —      | ✓ (20 of 61 rules) |
 | Postgres-version-aware                | ✓      | ✓ (PG15+)         |
 
 ## Wire both into CI
