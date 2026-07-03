@@ -13,7 +13,7 @@ rules. `pgrls verify` does something no other RLS tool does — it runs the
 **Z3 SMT solver** over a policy's predicate and *proves* a tenant-isolation
 property, or hands back a **concrete counterexample row** when the proof fails.
 
-Three threat models (`--mode`), each its own proof:
+Four threat models (`--mode`), each its own proof:
 
 - **`--mode anon`** (default) — can an *unauthenticated* session read any row?
 - **`--mode cross-tenant`** — can a session authenticated as one tenant read a
@@ -21,6 +21,11 @@ Three threat models (`--mode`), each its own proof:
 - **`--mode write`** — can such a session *write* a row stamped for another
   tenant? Proven over each policy's `WITH CHECK` — the account-takeover-adjacent
   footgun no other tool checks. *(pgrls ≥ 0.39.0.)*
+- **`--mode escalation`** — can a low-trust role that is a *member of a table's
+  owner* bypass RLS on the owner's not-`FORCE`'d tables (the reachable SEC048
+  privilege-escalation path, plus the anon-callable `SECURITY DEFINER` SEC042
+  case)? Proves or refutes the static reachability finding; `--probe` live-
+  confirms it via a real `SET ROLE` chain. *(pgrls ≥ 0.45.0.)*
 
 Every table gets one of three **honest verdicts**:
 
