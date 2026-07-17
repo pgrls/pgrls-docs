@@ -24,7 +24,7 @@ Accepted by the maintainers.
 | [miurla/morphic](https://github.com/miurla/morphic) | 8,977★ | Wrap `current_setting()` for per-statement eval | [#902](https://github.com/miurla/morphic/pull/902) |
 | [ruvnet/RuVector](https://github.com/ruvnet/RuVector) | 4,355★ | Wrap `current_setting()` in the tenancy RLS codegen (Rust) | [#639](https://github.com/ruvnet/RuVector/pull/639) |
 | [JasperFx/marten](https://github.com/JasperFx/marten) | 3,430★ | Wrap `current_setting()` in the generated tenant policy (.NET) | [#4805](https://github.com/JasperFx/marten/pull/4805) |
-| [gridaco/grida](https://github.com/gridaco/grida) | 2,558★ | Wrap `auth.uid()`, enable FORCE RLS | [issue](https://github.com/gridaco/grida/issues/873) · [#874](https://github.com/gridaco/grida/pull/874) |
+| [gridaco/grida](https://github.com/gridaco/grida) | 2,558★ | Wrap `auth.uid()` (FORCE RLS flagged as optional) | [issue](https://github.com/gridaco/grida/issues/873) · [#874](https://github.com/gridaco/grida/pull/874) |
 | [crbnos/carbon](https://github.com/crbnos/carbon) | 2,264★ | Per-statement auth wrap (USING + WITH CHECK) | [issue](https://github.com/crbnos/carbon/issues/964) · [#965](https://github.com/crbnos/carbon/pull/965) |
 | [saltcorn/saltcorn](https://github.com/saltcorn/saltcorn) | 2,029★ | Wrap `current_setting()` in the generated RLS policy codegen (Node/TS) | [#4286](https://github.com/saltcorn/saltcorn/pull/4286) |
 | [moyangzhan/langchain4j-aideepin](https://github.com/moyangzhan/langchain4j-aideepin) | 1,329★ | Fix cross-user knowledge-base read | [issue](https://github.com/moyangzhan/langchain4j-aideepin/issues/104) · [#105](https://github.com/moyangzhan/langchain4j-aideepin/pull/105) |
