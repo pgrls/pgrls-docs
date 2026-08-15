@@ -13,19 +13,29 @@ rules. `pgrls verify` does something no other RLS tool does — it runs the
 **Z3 SMT solver** over a policy's predicate and *proves* a tenant-isolation
 property, or hands back a **concrete counterexample row** when the proof fails.
 
-Four threat models (`--mode`), each its own proof:
+Five threat models (`--mode`), each its own proof:
 
 - **`--mode anon`** (default) — can an *unauthenticated* session read any row?
 - **`--mode cross-tenant`** — can a session authenticated as one tenant read a
   *different* tenant's row?
 - **`--mode write`** — can such a session *write* a row stamped for another
-  tenant? Proven over each policy's `WITH CHECK` — the account-takeover-adjacent
-  footgun no other tool checks. *(pgrls ≥ 0.39.0.)*
+  tenant? A write crosses tenants two ways, so both gates are proven: the
+  `WITH CHECK` that decides what row may be left behind, and the `USING` that
+  decides which *existing* rows the session may reach. The
+  account-takeover-adjacent footgun no other tool checks.
+  *(pgrls ≥ 0.39.0; the `USING` gate since 0.53.0.)*
 - **`--mode escalation`** — can a low-trust role that is a *member of a table's
   owner* bypass RLS on the owner's not-`FORCE`'d tables (the reachable SEC048
   privilege-escalation path, plus the anon-callable `SECURITY DEFINER` SEC042
   case)? Proves or refutes the static reachability finding; `--probe` live-
   confirms it via a real `SET ROLE` chain. *(pgrls ≥ 0.45.0.)*
+- **`--mode reachability`** — a table's policies can deny anonymous reads and
+  a **view** over it still hand them out. A `security_invoker = false` view runs
+  as its *owner*, so an anon-selectable one owned by an RLS-exempt role returns
+  every row the policies were written to withhold. Proves whether that second
+  door is open — gated on the owner actually being exempt, so a view owned by an
+  ordinary role, or one over a `FORCE`'d table, stays silent.
+  *(pgrls ≥ 0.54.0.)*
 
 Every table gets one of three **honest verdicts**:
 

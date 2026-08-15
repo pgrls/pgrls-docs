@@ -49,7 +49,7 @@ flags it as **SEC004** in milliseconds.
 | Catches per-row perf traps in RLS | —        | ✓     |
 | Reads from `.sql` files           | ✓        | —     |
 | Reads from a live Postgres        | —        | ✓     |
-| Auto-fix                          | ✓        | ✓ (20 of 64 rules) |
+| Auto-fix                          | ✓        | ✓ (19 of 67 rules) |
 | Multi-dialect                     | ✓ (25+)  | — (Postgres only) |
 
 ## Wire both into CI
