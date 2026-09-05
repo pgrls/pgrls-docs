@@ -1,6 +1,6 @@
 ---
 title: In the wild
-nav_order: 4
+nav_order: 5
 permalink: /in-the-wild/
 description: Real Row-Level Security fixes pgrls surfaced and contributed to open-source Postgres / Supabase projects.
 ---
